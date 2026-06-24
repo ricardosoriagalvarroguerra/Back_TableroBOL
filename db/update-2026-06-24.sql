@@ -22,25 +22,17 @@ BEGIN;
 -- B · BLOQUEOS — desenlace del conflicto (ABC, 23-jun)
 -- ────────────────────────────────────────────────────────────────────────
 
--- 1) Todos los bloqueos vigentes quedan LEVANTADOS (cierre 23-jun).
+-- 1) Todos los bloqueos quedan LEVANTADOS. El 23-jun la ABC declaró las
+--    carreteras libres de bloqueos por conflictos sociales; las 4 rutas que
+--    seguían con escombros eran limpieza post-bloqueo, no bloqueos activos.
+--    → 0 puntos activos en la Red Vial Fundamental al 24-jun.
 UPDATE bloqueos
    SET estado       = 'levantado',
        fecha_fin    = DATE '2026-06-23',
        fuente_texto = 'ABC · transitabilidad RVF (23 jun)'
  WHERE estado <> 'levantado';
 
--- 2) …salvo 4 rutas que el 23–24 jun seguían en LIMPIEZA de escombros
---    (parcial, severidad baja): Chimoré–Villa Tunari (trópico/CBBA),
---    Parotani–Llavini (corredor CBBA–Oruro), Patacamaya–Sica Sica (LP–Oruro)
---    y el nudo de Caracollo (Oruro).
-UPDATE bloqueos
-   SET estado       = 'parcial',
-       severidad    = 'baja',
-       fecha_fin    = NULL,
-       fuente_texto = 'ABC · transitabilidad RVF (24 jun)'
- WHERE codigo IN ('b1','b3','b9','b14');
-
--- 3) Cronología del desenlace (idempotente para fechas ≥ 19-jun).
+-- 2) Cronología del desenlace (idempotente para fechas ≥ 19-jun).
 DELETE FROM bloqueo_eventos be
  USING bloqueos b
  WHERE be.bloqueo_id = b.id
