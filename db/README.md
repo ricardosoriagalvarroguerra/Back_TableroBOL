@@ -6,7 +6,8 @@ Diseñada para que el backend (fase siguiente) reemplace los datos mock de
 
 - **Motor:** PostgreSQL 18
 - **Base:** `bolivia`
-- **Esquema:** `public` · 23 tablas · 6 vistas · 12 enums · 69 índices · 4 triggers
+- **Esquema:** `public` · 32 tablas · 6 vistas · 12 enums
+- **Snapshot:** 17-nov-2026 (generado desde `src/data/`)
 
 ## Cómo crear / recrear
 
@@ -14,11 +15,15 @@ Diseñada para que el backend (fase siguiente) reemplace los datos mock de
 # 1) estructura (idempotente: reinicia el schema public)
 psql -d bolivia -v ON_ERROR_STOP=1 -f db/schema.sql
 
-# 2) datos de demostración (snapshot ~27 may 2026, generado desde mockData.ts)
+# 2) datos (snapshot 17-nov-2026, generado desde src/data/)
 node db/generate-seed.mjs           # regenera db/seed.sql
 psql -d bolivia -v ON_ERROR_STOP=1 -f db/seed.sql
 ```
 
+> **En producción no hace falta correr nada a mano:** `npm run sync:db` en
+> Back_TableroBOL copia schema + seed y la API los aplica al arrancar si su hash
+> cambió (tabla `seed_meta`).
+>
 > `generate-seed.mjs` importa los **mismos** datos que usa el frontend, así la
 > BDR y el tablero quedan idénticos. En producción se reemplaza por la ingesta
 > real (BCB / INE / YPFB / ABC / EMBI / RSS).
@@ -33,6 +38,9 @@ psql -d bolivia -v ON_ERROR_STOP=1 -f db/seed.sql
 | **D** Noticias | `medios`, `categorias_noticia`, `terminos` | `noticias`, `noticia_terminos` (M:N), `noticia_vinculos` |
 | **E** Calendario | `categorias_evento` | `eventos` |
 | **F** Health-check | `fuentes` | `fuente_estado` |
+| **H** Histórico | `indicadores.historico_nota` | `indicador_historico` (serie anual 2015→hoy), `calificaciones_historia` |
+| **Z** Análisis | — | `analisis` (documento `jsonb`, clave `vigente`) |
+| Despliegue | — | `seed_meta` (hash del schema + seed aplicado) |
 
 ## Relaciones clave
 

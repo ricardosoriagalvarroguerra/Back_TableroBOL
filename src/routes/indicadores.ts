@@ -22,15 +22,24 @@ interface IndicadorRow {
   var_mensual: number | null;
   brecha_pct: number | null;
   spark: number[] | null;
+  periodicidad: string | null;
+  historico: { periodo: string; valor: number }[] | null;
+  historico_nota: string | null;
+  extra_label: string | null;
+  extra_valor: string | null;
+  extra_tono: 'pos' | 'neg' | 'neutral' | null;
 }
 
 function toKpi(r: IndicadorRow) {
+  // dato complementario: el curado en la BDR; si falta, brecha o variación mensual
   const extra =
-    r.brecha_pct != null
-      ? { label: 'BRECHA', value: pct(r.brecha_pct, 1), tone: 'neg' as const }
-      : r.var_mensual != null
-        ? { label: 'MENSUAL', value: pct(r.var_mensual, 2), tone: 'neg' as const }
-        : null;
+    r.extra_label != null
+      ? { label: r.extra_label, value: r.extra_valor ?? '', tone: r.extra_tono ?? 'neutral' }
+      : r.brecha_pct != null
+        ? { label: 'Brecha', value: pct(r.brecha_pct, 1), tone: 'neutral' as const }
+        : r.var_mensual != null
+          ? { label: 'Mensual', value: pct(r.var_mensual, 2), tone: 'neg' as const }
+          : null;
   return {
     id: r.codigo,
     label: r.nombre,
@@ -45,6 +54,10 @@ function toKpi(r: IndicadorRow) {
     source: r.fuente,
     asof: r.asof ?? fechaCorta(r.fecha_dato),
     def: r.definicion,
+    periodicidad: r.periodicidad ?? undefined,
+    // serie anual 2015 → hoy (pestaña Histórico)
+    historico: r.historico ?? undefined,
+    historicoNota: r.historico_nota ?? undefined,
     extra,
   };
 }
@@ -52,7 +65,8 @@ function toKpi(r: IndicadorRow) {
 const SELECT_INDICADORES = `
   SELECT a.id, a.codigo, a.nombre, a.unidad, a.categoria, a.sentido, a.decimales,
          a.definicion, a.asof, a.fuente, a.fecha_dato, a.valor, a.variacion,
-         a.variacion_etiqueta, a.var_mensual, a.brecha_pct,
+         a.variacion_etiqueta, a.var_mensual, a.brecha_pct, a.periodicidad,
+         a.historico, a.historico_nota, a.extra_label, a.extra_valor, a.extra_tono,
          (SELECT array_agg(valor ORDER BY fecha)
             FROM (SELECT valor, fecha FROM indicador_observaciones
                   WHERE indicador_id = a.id ORDER BY fecha DESC LIMIT 12) s) AS spark

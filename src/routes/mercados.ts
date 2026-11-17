@@ -19,7 +19,7 @@ const PERSPECTIVA: Record<string, string> = {
 
 export function registerMercados(app: FastifyInstance): void {
   app.get('/api/mercados', async () => {
-    const [bonos, embiSerie, cds, ratings, reservas] = await Promise.all([
+    const [bonos, embiSerie, cds, ratings, reservas, ratingsHist] = await Promise.all([
       query<{ codigo: string; nombre: string; precio: number; rendimiento: number; spread_ust: number; variacion: number }>(
         `SELECT codigo, nombre, precio, rendimiento, spread_ust, variacion FROM v_bonos_actuales ORDER BY codigo`,
       ),
@@ -40,6 +40,10 @@ export function registerMercados(app: FastifyInstance): void {
         `SELECT componente, porcentaje FROM reservas_composicion
           WHERE fecha = (SELECT max(fecha) FROM reservas_composicion)`,
       ),
+      // línea de tiempo de calificaciones a fin de año (tabla opcional en BDR anteriores)
+      query<{ anio: string; sp: string | null; moodys: string | null; fitch: string | null }>(
+        `SELECT anio, sp, moodys, fitch FROM calificaciones_historia ORDER BY anio`,
+      ).catch(() => []),
     ]);
 
     const embiLast = embiSerie.at(-1);
@@ -71,6 +75,7 @@ export function registerMercados(app: FastifyInstance): void {
         divisas: reservasMap.divisas ?? 0,
         deg: reservasMap.deg ?? 0,
       },
+      ratingsHistoria: ratingsHist,
     };
   });
 }

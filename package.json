@@ -1,7 +1,7 @@
 {
   "name": "tablero-inteligente-bol-api",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "API (Fastify + pg) que sirve el Tablero Inteligente BOL desde la BDR PostgreSQL.",
   "engines": {
@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env src/index.ts",
     "start": "node --env-file-if-exists=.env src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sync:db": "node scripts/sync-db.mjs"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
