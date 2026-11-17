@@ -23,8 +23,8 @@ export function registerMercados(app: FastifyInstance): void {
       query<{ codigo: string; nombre: string; precio: number; rendimiento: number; spread_ust: number; variacion: number }>(
         `SELECT codigo, nombre, precio, rendimiento, spread_ust, variacion FROM v_bonos_actuales ORDER BY codigo`,
       ),
-      query<{ valor: number; variacion: number | null }>(
-        `SELECT io.valor, io.variacion
+      query<{ f: string; valor: number; variacion: number | null }>(
+        `SELECT to_char(io.fecha, 'YYYY-MM-DD') AS f, io.valor, io.variacion
            FROM indice_riesgo_observaciones io JOIN indices_riesgo i ON i.id = io.indice_id
           WHERE i.codigo = 'EMBI' ORDER BY io.fecha`,
       ),
@@ -61,7 +61,9 @@ export function registerMercados(app: FastifyInstance): void {
       embi: {
         value: embiLast?.valor ?? null,
         chg: embiLast?.variacion ?? 0,
-        series: embiSerie.map((r) => r.valor),
+        series: embiSerie.slice(-60).map((r) => r.valor),
+        history: embiSerie.map((r) => ({ f: r.f, v: r.valor })),
+        fecha: embiLast?.f ?? null,
       },
       cds5y: { value: cds?.valor ?? null, chg: cds?.variacion ?? 0, note: cds?.nota ?? '' },
       ratings: ratings.map((r) => ({
