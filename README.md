@@ -10,7 +10,6 @@ desde las vistas `v_*` de la BDR PostgreSQL `bolivia`.
 ## Correr
 
 ```bash
-cd server
 npm install
 cp .env.example .env        # ajustar DATABASE_URL si hace falta
 npm run dev                 # http://localhost:5174 (con --watch)
@@ -18,18 +17,36 @@ npm run dev                 # http://localhost:5174 (con --watch)
 npm run typecheck
 ```
 
-Requiere la BDR creada y poblada (ver [`../db/`](../db/README.md)).
+## BDR auto-aprovisionada (Railway u otro Postgres)
+
+No hace falta correr `psql` a mano. Al arrancar, la API ([`src/bootstrap.ts`](src/bootstrap.ts))
+calcula el hash de `db/schema.sql` + `db/seed.sql` y lo compara con `seed_meta.version`:
+si la base está vacía o el seed cambió, aplica ambos en **una transacción** con advisory lock
+(ROLLBACK si falla; la API sigue sirviendo con lo que había). `GET /api/health` informa la
+versión cargada.
+
+- `DB_AUTO_SEED=false` desactiva el auto-aprovisionamiento.
+- El esquema y el seed se generan en el repo del frontend
+  ([front_TableroBOL](https://github.com/ricardosoriagalvarroguerra/front_TableroBOL), `db/`) y se
+  copian aquí con `npm run sync:db` (usa `../front_TableroBOL`, o `FRONT_DIR=/ruta`).
+- En Railway basta con definir `DATABASE_URL` (la del plugin Postgres) y desplegar: el primer
+  arranque crea el esquema y carga los datos.
+
+> **Aviso:** `db/schema.sql` reinicia el schema `public` (DROP … CASCADE). Úsalo sólo sobre la
+> base dedicada al tablero.
 
 ## Endpoints
 
 | Método y ruta | Módulo | Devuelve |
 |---|---|---|
-| `GET /api/health` | — | ping a la BDR |
-| `GET /api/indicadores` | A | KPIs (valor, delta, **brecha**, sparkline 12m) |
+| `GET /api/health` | — | ping a la BDR + versión del seed |
+| `GET /api/indicadores` | A | KPIs (valor, delta, dato complementario, sparkline, **serie anual 2015→hoy**) |
 | `GET /api/indicadores/:codigo` | A | + serie histórica completa |
 | `GET /api/bloqueos` | B | lista + resumen (activos / dptos.) |
 | `GET /api/bloqueos/:codigo` | B | detalle + cronología |
-| `GET /api/mercados` | C | bonos, EMBI (30d), CDS, ratings, RIN |
+| `GET /api/mercados` | C | bonos, EMBI, CDS, ratings, RIN, **calificaciones a fin de año** |
+| `GET /api/externo` | X | commodities, deuda, balanza, combustibles, FMI |
+| `GET /api/analisis` | Z | capa analítica: tesis, semáforo, proyecciones, escenarios, riesgos, lecturas |
 | `GET /api/noticias?tag=` | D | feed (filtrable por categoría) |
 | `GET /api/noticias/:codigo` | D | cuerpo + términos + vínculos |
 | `GET /api/eventos` | E | calendario próximos 30 días |
@@ -44,17 +61,20 @@ React (src/) ──fetch──> Fastify (server/) ──pg──> PostgreSQL (db
         └── fallback a mockData si la API no responde ─────┘
 ```
 
-El frontend ([`../src/useDashboardData.ts`](../src/useDashboardData.ts)) consume
+El frontend (`src/useDashboardData.ts` en front_TableroBOL) consume
 estos endpoints y cae a los datos embebidos si la API está caída, así que la UI
 funciona siempre. El footer indica el origen («BDR en vivo» / «datos locales»).
 
 ## Estructura
 
 ```
-server/src/
+db/                 # schema.sql + seed.sql (copiados del front con npm run sync:db)
+scripts/sync-db.mjs # copia db/ desde front_TableroBOL
+src/
 ├── index.ts        # bootstrap Fastify + CORS + health
+├── bootstrap.ts    # auto-aprovisionamiento de la BDR (hash → seed_meta)
 ├── env.ts          # config desde entorno
 ├── db.ts           # pool pg + helpers query/one
 ├── format.ts       # helpers es-BO (fecha, %, número)
-└── routes/         # un archivo por módulo (A–F) + search
+└── routes/         # un archivo por módulo (A–F, externo, analisis) + search
 ```

@@ -31,7 +31,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;    -- búsqueda difusa / similitud
 -- Tipos enumerados (dominios fijos)
 -- ────────────────────────────────────────────────────────────────────────
 CREATE TYPE sentido_indicador  AS ENUM ('pos', 'neg', 'neutral', 'accent');
-CREATE TYPE categoria_indicador AS ENUM ('cambiario', 'monetario', 'precios', 'actividad', 'fiscal', 'energia');
+CREATE TYPE categoria_indicador AS ENUM ('cambiario', 'monetario', 'precios', 'actividad', 'fiscal', 'energia', 'externo', 'social');
 CREATE TYPE periodicidad       AS ENUM ('diaria', 'semanal', 'mensual', 'trimestral', 'semestral', 'anual');
 CREATE TYPE tipo_fuente        AS ENUM ('oficial', 'mercado', 'prensa', 'sectorial', 'agregador');
 CREATE TYPE estado_fuente      AS ENUM ('ok', 'lag', 'live', 'cold', 'down');
@@ -163,6 +163,10 @@ CREATE TABLE indicadores (
   fuente_id          smallint            REFERENCES fuentes(id) ON DELETE SET NULL,
   -- indicador base para calcular brecha (p.ej. paralelo vs oficial)
   indicador_base_id  smallint            REFERENCES indicadores(id) ON DELETE SET NULL,
+  historico_nota     text,                                  -- definición de la serie anual 2015→hoy
+  extra_label        text,                                  -- dato complementario de la tarjeta (p. ej. «vs fijo 6,96»)
+  extra_valor        text,
+  extra_tono         text,                                  -- 'pos' | 'neg' | 'neutral'
   creado_en          timestamptz         NOT NULL DEFAULT now(),
   actualizado_en     timestamptz         NOT NULL DEFAULT now(),
   CHECK (indicador_base_id IS NULL OR indicador_base_id <> id)
@@ -440,10 +444,52 @@ CREATE TRIGGER trg_noticias_upd    BEFORE UPDATE ON noticias    FOR EACH ROW EXE
 -- ════════════════════════════════════════════════════════════════════════
 
 -- A · indicadores con su último valor, delta y brecha calculada
+-- ════════════════════════════════════════════════════════════════════════
+-- SERIES LARGAS, ANÁLISIS Y METADATOS DEL SEED
+-- ════════════════════════════════════════════════════════════════════════
+
+-- Serie anual larga (2015 → hoy) por indicador, para la pestaña Histórico.
+CREATE TABLE indicador_historico (
+  indicador_id smallint      NOT NULL REFERENCES indicadores(id) ON DELETE CASCADE,
+  orden        smallint      NOT NULL,
+  periodo      text          NOT NULL,          -- '2015' … '2025', '2026*' (dato vigente)
+  valor        numeric(20,4) NOT NULL,
+  PRIMARY KEY (indicador_id, orden)
+);
+COMMENT ON TABLE indicador_historico IS 'Serie anual larga (2015 → hoy) por indicador; años sin dato verificable se omiten.';
+
+-- Calificación soberana vigente a fin de cada año (línea de tiempo en Mercados).
+CREATE TABLE calificaciones_historia (
+  anio   text PRIMARY KEY,                       -- '2025', '2026*' (vigente)
+  sp     text,
+  moodys text,
+  fitch  text
+);
+COMMENT ON TABLE calificaciones_historia IS 'Rating soberano a fin de año por agencia (S&P, Moody''s, Fitch).';
+
+-- Capa analítica (Módulo Z): juicio fechado del tablero, separado del dato de fuente.
+CREATE TABLE analisis (
+  clave          text        PRIMARY KEY,        -- 'vigente' (documento actual)
+  asof           text        NOT NULL,
+  contenido      jsonb       NOT NULL,           -- tesis, semáforo, proyecciones, escenarios, riesgos, lecturas
+  actualizado_en timestamptz NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE analisis IS 'Capa analítica (Módulo Z): tesis, semáforo, proyecciones, escenarios, riesgos y lecturas.';
+
+-- Versión del seed aplicado: la API la compara al arrancar para auto-aprovisionar.
+CREATE TABLE seed_meta (
+  version     text        PRIMARY KEY,           -- hash de schema.sql + seed.sql aplicado
+  aplicado_en timestamptz NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE seed_meta IS 'Versión del seed cargado; la API la usa para auto-aplicar schema + seed al desplegar.';
+
 CREATE VIEW v_indicadores_actuales AS
 SELECT
   i.id, i.codigo, i.nombre, i.unidad, i.categoria, i.sentido, i.decimales,
-  i.definicion, i.asof, i.periodicidad,
+  i.definicion, i.asof, i.periodicidad, i.historico_nota,
+  i.extra_label, i.extra_valor, i.extra_tono,
+  (SELECT json_agg(json_build_object('periodo', h.periodo, 'valor', h.valor) ORDER BY h.orden)
+     FROM indicador_historico h WHERE h.indicador_id = i.id) AS historico,
   f.nombre  AS fuente,
   f.codigo  AS fuente_codigo,
   o.fecha   AS fecha_dato,
