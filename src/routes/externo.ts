@@ -28,10 +28,17 @@ interface MetricaRow {
 
 export function registerExterno(app: FastifyInstance): void {
   app.get('/api/externo', async () => {
-    const [commodities, metricas] = await Promise.all([
+    const [commodities, metricas, obs] = await Promise.all([
       query<CommodityRow>(`SELECT * FROM commodities ORDER BY id`),
       query<MetricaRow>(`SELECT * FROM externo_metricas`),
+      // serie de cada commodity (la ingesta guarda cierres diarios) para el modal
+      query<{ codigo: string; f: string; v: number }>(
+        `SELECT c.codigo, to_char(o.fecha, 'YYYY-MM-DD') AS f, o.valor AS v
+           FROM commodity_observaciones o JOIN commodities c ON c.id = o.commodity_id ORDER BY c.codigo, o.fecha`,
+      ),
     ]);
+    const hist: Record<string, { f: string; v: number }[]> = {};
+    for (const o of obs) (hist[o.codigo] ??= []).push({ f: o.f, v: o.v });
     const M = Object.fromEntries(metricas.map((m) => [m.clave, m]));
     const valOf = (k: string) => M[k]?.valor ?? null;
     const srcOf = (k: string) => M[k]?.fuente ?? '';
@@ -49,6 +56,7 @@ export function registerExterno(app: FastifyInstance): void {
         source: c.fuente,
         asof: c.asof,
         nota: c.nota ?? undefined,
+        history: hist[c.codigo] ?? [],
       })),
       deuda: {
         externaStock: valOf('deuda_externa_stock'),
@@ -76,6 +84,31 @@ export function registerExterno(app: FastifyInstance): void {
         y2027: valOf('servicio_2027'),
         y2028: valOf('servicio_2028'),
         source: srcOf('servicio_2026'),
+      },
+      analitica: {
+        gasExportUsd: valOf('gas_export_usd'),
+        gasExportPeriodo: asofOf('gas_export_usd'),
+        gasExportVar: (() => {
+          const m = (M['gas_export_usd']?.nota ?? '').match(/(-?[\d.]+)%/);
+          return m ? Number(m[1]) : null;
+        })(),
+        ccPct: valOf('cuenta_corriente_pct'),
+        ccUsd: valOf('cuenta_corriente_usd'),
+        ccPeriodo: asofOf('cuenta_corriente_usd'),
+        remesasUsd: valOf('remesas_usd'),
+        remesasPeriodo: asofOf('remesas_usd'),
+        bolivianizacion: valOf('bolivianizacion'),
+        bolivPeriodo: asofOf('bolivianizacion'),
+        finMonetarioFlujo: valOf('fin_monetario_bcb_spnf'),
+        finMonetarioProg: (() => {
+          const m = (M['fin_monetario_bcb_spnf']?.nota ?? '').match(/(-?[\d.]+)/);
+          return m ? Number(m[1]) : null;
+        })(),
+        finMonetarioPeriodo: asofOf('fin_monetario_bcb_spnf'),
+        fmiEstado: asofOf('fmi_monto'),
+        fmiMonto: valOf('fmi_monto'),
+        fmiNota: M['fmi_monto']?.nota ?? '',
+        source: srcOf('gas_export_usd') || srcOf('remesas_usd'),
       },
     };
   });

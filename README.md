@@ -38,8 +38,20 @@ La API trae datos nuevos sola, sin regenerar el seed:
 
 | Fuente | Qué trae | Módulo |
 |---|---|---|
-| BCB · TCO | tipo de cambio oficial vigente (y la brecha con el último paralelo) | `src/ingest/bcb.ts` |
+| Binance P2P (USDT/BOB) | dólar paralelo: mediana de los 10 primeros avisos de compra y de venta | `src/ingest/p2p.ts` |
+| BCB · TCO | tipo de cambio oficial vigente, «vs fijo 6,96» y la brecha con el paralelo | `src/ingest/bcb.ts` |
+| INE · IPC base 2016 | inflación a 12 meses y mensual, enero 2018 → último mes | `src/ingest/ine_ipc.ts` |
+| INE · comercio exterior | exportaciones (FOB), importaciones (CIF), balanza mensual, export. de gas, series anuales | `src/ingest/ine_comercio.ts` |
+| EMBI (JP Morgan, serie del BCRD) | spread diario de Bolivia y cierres de año 2015 → hoy | `src/ingest/embi.ts` |
+| Commodities | oro, plata, soya, Henry Hub (Yahoo Finance) · estaño y zinc LME cash (Westmetall) | `src/ingest/commodities.ts` |
+| Noticias (RSS) | Google News (4 búsquedas sobre Bolivia), ABC (notas de prensa) y eju.tv; clasificación por reglas | `src/ingest/noticias.ts` |
 | FMI · WEO | 6 indicadores × 9 países de Sudamérica, 2015–2027 (comparador regional) | `src/ingest/imf.ts` |
+
+**No conectables hoy:** la transitabilidad de la ABC (`transitabilidad.abc.gob.bo`) no responde
+desde fuera de Bolivia y está detrás de un captcha; YPFB no publica la producción de gas en un
+formato legible (sólo boletines informativos en PDF). Ambos siguen como datos curados del seed.
+Los enlaces de las planillas del INE se descubren en cada corrida leyendo la página del cuadro
+(el INE los renueva al publicar).
 
 - Corre al arrancar (después del auto-seed) y cada `INGEST_INTERVAL_HOURS` (6 por defecto);
   `INGEST_ENABLED=false` la apaga. También: `npm run ingest` o `POST /api/ingesta` con

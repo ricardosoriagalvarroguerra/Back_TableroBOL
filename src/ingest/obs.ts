@@ -32,7 +32,7 @@ export async function upsertObs(client: PoolClient, codigo: string, fecha: strin
 export async function recalcularDelta(
   client: PoolClient,
   codigo: string,
-  opts: { minDias: number; modo: 'pct' | 'pp'; dec?: number; conFecha?: boolean },
+  opts: { minDias: number; modo: 'pct' | 'pp' | 'abs'; dec?: number; conFecha?: boolean; unidad?: string; asof?: boolean },
 ): Promise<void> {
   const { rows } = await client.query<{ id: number; fecha: string; valor: number; ind: number }>(
     `SELECT o.id, to_char(o.fecha, 'YYYY-MM-DD') AS fecha, o.valor::float8 AS valor, o.indicador_id AS ind
@@ -50,17 +50,46 @@ export async function recalcularDelta(
   const base = ref.rows[0];
   if (base && base.valor !== 0) {
     const delta = opts.modo === 'pct' ? (ult.valor / base.valor - 1) * 100 : ult.valor - base.valor;
+    const signo = delta > 0 ? '+' : '';
     const vs = opts.conFecha === false ? '' : ` vs ${ddMes(base.fecha)}`;
     const etiqueta =
       opts.modo === 'pct'
         ? `${pctTxt(delta, opts.dec ?? 1)}${vs}`
-        : `${delta > 0 ? '+' : ''}${coma(delta, opts.dec ?? 1)} pp${vs}`;
+        : opts.modo === 'pp'
+          ? `${signo}${coma(delta, opts.dec ?? 1)} pp${vs}`
+          : `${signo}${Math.round(delta).toLocaleString('es-BO').replace('-', '−')} ${opts.unidad ?? ''}`.trim() + vs;
     await client.query(
       `UPDATE indicador_observaciones SET variacion = $2, variacion_etiqueta = $3 WHERE id = $1`,
       [ult.id, Number(delta.toFixed(4)), etiqueta],
     );
   }
-  await client.query(`UPDATE indicadores SET asof = $2 WHERE codigo = $1`, [codigo, ddMes(ult.fecha)]);
+  if (opts.asof !== false) {
+    await client.query(`UPDATE indicadores SET asof = $2 WHERE codigo = $1`, [codigo, ddMes(ult.fecha)]);
+  }
+}
+
+/** Fija la etiqueta «asof» del indicador (p. ej. «oct 2026»). */
+export async function fijarAsof(client: PoolClient, codigo: string, asof: string): Promise<void> {
+  await client.query(`UPDATE indicadores SET asof = $2 WHERE codigo = $1`, [codigo, asof]);
+}
+
+/** Actualiza el dato complementario («extra») de la tarjeta del indicador. */
+export async function fijarExtra(client: PoolClient, codigo: string, label: string, valor: string, tono: 'pos' | 'neg' | 'neutral'): Promise<void> {
+  await client.query(
+    `UPDATE indicadores SET extra_label = $2, extra_valor = $3, extra_tono = $4 WHERE codigo = $1`,
+    [codigo, label, valor, tono],
+  );
+}
+
+/** Reemplaza la serie anual larga (pestaña Histórico) del indicador. */
+export async function fijarHistorico(client: PoolClient, codigo: string, serie: { periodo: string; valor: number }[]): Promise<void> {
+  await client.query(`DELETE FROM indicador_historico WHERE indicador_id = (SELECT id FROM indicadores WHERE codigo = $1)`, [codigo]);
+  for (const [i, p] of serie.entries()) {
+    await client.query(
+      `INSERT INTO indicador_historico (indicador_id, orden, periodo, valor) SELECT id, $2, $3, $4 FROM indicadores WHERE codigo = $1`,
+      [codigo, i, p.periodo, p.valor],
+    );
+  }
 }
 
 /** Último valor (y fecha) de un indicador. */

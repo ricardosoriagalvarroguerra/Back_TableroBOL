@@ -14,6 +14,12 @@ import type { PoolClient } from 'pg';
 import { pool } from '../db.ts';
 import { ingestarTco } from './bcb.ts';
 import { ingestarFmi } from './imf.ts';
+import { ingestarP2p } from './p2p.ts';
+import { ingestarIpc } from './ine_ipc.ts';
+import { ingestarComercio } from './ine_comercio.ts';
+import { ingestarEmbi } from './embi.ts';
+import { ingestarCommodities } from './commodities.ts';
+import { ingestarNoticias } from './noticias.ts';
 
 const LOCK_ID = 727_101;
 
@@ -23,8 +29,15 @@ interface Fuente {
   run: (c: PoolClient) => Promise<{ filas: number; mensaje: string }>;
 }
 
+// Orden: el paralelo va antes del TCO para que la brecha use el dato del día.
 export const FUENTES_INGESTA: Fuente[] = [
+  { id: 'p2p_binance', fuenteCodigo: 'p2p', run: ingestarP2p },
   { id: 'bcb_tco', fuenteCodigo: 'bcb', run: ingestarTco },
+  { id: 'ine_ipc', fuenteCodigo: 'ine', run: ingestarIpc },
+  { id: 'ine_comercio', fuenteCodigo: 'ine', run: ingestarComercio },
+  { id: 'embi_bcrd', fuenteCodigo: 'embi', run: ingestarEmbi },
+  { id: 'commodities', fuenteCodigo: 'commodities', run: ingestarCommodities },
+  { id: 'noticias_rss', fuenteCodigo: 'news', run: ingestarNoticias },
   { id: 'fmi_weo', fuenteCodigo: 'fmi', run: ingestarFmi },
 ];
 
