@@ -23,6 +23,7 @@ interface IndicadorRow {
   brecha_pct: number | null;
   spark: number[] | null;
   periodicidad: string | null;
+  fecha_iso: string | null;
   historico: { periodo: string; valor: number }[] | null;
   historico_nota: string | null;
   extra_label: string | null;
@@ -58,6 +59,7 @@ function toKpi(r: IndicadorRow) {
     // serie anual 2015 → hoy (pestaña Histórico)
     historico: r.historico ?? undefined,
     historicoNota: r.historico_nota ?? undefined,
+    fecha: r.fecha_iso ?? undefined,
     extra,
   };
 }
@@ -66,7 +68,7 @@ const SELECT_INDICADORES = `
   SELECT a.id, a.codigo, a.nombre, a.unidad, a.categoria, a.sentido, a.decimales,
          a.definicion, a.asof, a.fuente, a.fecha_dato, a.valor, a.variacion,
          a.variacion_etiqueta, a.var_mensual, a.brecha_pct, a.periodicidad,
-         a.historico, a.historico_nota, a.extra_label, a.extra_valor, a.extra_tono,
+         a.historico, a.historico_nota, to_char(a.fecha_dato, 'YYYY-MM-DD') AS fecha_iso, a.extra_label, a.extra_valor, a.extra_tono,
          (SELECT array_agg(valor ORDER BY fecha)
             FROM (SELECT valor, fecha FROM indicador_observaciones
                   WHERE indicador_id = a.id ORDER BY fecha DESC LIMIT 12) s) AS spark
@@ -76,8 +78,18 @@ const SELECT_INDICADORES = `
 export function registerIndicadores(app: FastifyInstance): void {
   // Lista de KPIs con sparkline + delta + brecha
   app.get('/api/indicadores', async () => {
-    const rows = await query<IndicadorRow>(SELECT_INDICADORES);
-    return rows.map(toKpi);
+    const [rows, obs] = await Promise.all([
+      query<IndicadorRow>(SELECT_INDICADORES),
+      // serie fechada completa (modal y sparkline): refleja la ingesta en vivo
+      query<{ codigo: string; f: string; v: number }>(
+        `SELECT i.codigo, to_char(o.fecha, 'YYYY-MM-DD') AS f, o.valor AS v
+           FROM indicador_observaciones o JOIN indicadores i ON i.id = o.indicador_id
+          ORDER BY i.codigo, o.fecha`,
+      ),
+    ]);
+    const hist: Record<string, { f: string; v: number }[]> = {};
+    for (const o of obs) (hist[o.codigo] ??= []).push({ f: o.f, v: o.v });
+    return rows.map((r) => ({ ...toKpi(r), history: hist[r.codigo] ?? [] }));
   });
 
   // Detalle + serie histórica completa (modal)

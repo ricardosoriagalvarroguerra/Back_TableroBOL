@@ -32,6 +32,24 @@ versión cargada.
 - En Railway basta con definir `DATABASE_URL` (la del plugin Postgres) y desplegar: el primer
   arranque crea el esquema y carga los datos.
 
+## Ingesta automática (v0.3)
+
+La API trae datos nuevos sola, sin regenerar el seed:
+
+| Fuente | Qué trae | Módulo |
+|---|---|---|
+| BCB · TCO | tipo de cambio oficial vigente (y la brecha con el último paralelo) | `src/ingest/bcb.ts` |
+| FMI · WEO | 6 indicadores × 9 países de Sudamérica, 2015–2027 (comparador regional) | `src/ingest/imf.ts` |
+
+- Corre al arrancar (después del auto-seed) y cada `INGEST_INTERVAL_HOURS` (6 por defecto);
+  `INGEST_ENABLED=false` la apaga. También: `npm run ingest` o `POST /api/ingesta` con
+  `Authorization: Bearer $INGEST_TOKEN`.
+- Cada fuente corre en su propia transacción; las corridas quedan en `ingesta_corridas`
+  (`GET /api/ingesta` muestra la última de cada fuente) y actualizan `fuente_estado`.
+- Si el seed cambia, la base se recarga y la ingesta repone los datos nuevos en el arranque.
+- Para sumar una fuente: un módulo `src/ingest/<fuente>.ts` con `run(client) → { filas, mensaje }`
+  y una entrada en `FUENTES_INGESTA` (`src/ingest/index.ts`).
+
 > **Aviso:** `db/schema.sql` reinicia el schema `public` (DROP … CASCADE). Úsalo sólo sobre la
 > base dedicada al tablero.
 
@@ -47,6 +65,9 @@ versión cargada.
 | `GET /api/mercados` | C | bonos, EMBI, CDS, ratings, RIN, **calificaciones a fin de año** |
 | `GET /api/externo` | X | commodities, deuda, balanza, combustibles, FMI |
 | `GET /api/analisis` | Z | capa analítica: tesis, semáforo, proyecciones, escenarios, riesgos, lecturas |
+| `GET /api/region` | R | comparador regional (FMI WEO, 9 países, 2015–2027) |
+| `GET /api/alertas` | — | alertas por reglas explícitas (`src/alertas.ts`) sobre el último dato |
+| `GET /api/ingesta` · `POST /api/ingesta` | — | última corrida por fuente · ingesta manual (con token) |
 | `GET /api/noticias?tag=` | D | feed (filtrable por categoría) |
 | `GET /api/noticias/:codigo` | D | cuerpo + términos + vínculos |
 | `GET /api/eventos` | E | calendario próximos 30 días |

@@ -476,6 +476,31 @@ CREATE TABLE analisis (
 );
 COMMENT ON TABLE analisis IS 'Capa analítica (Módulo Z): tesis, semáforo, proyecciones, escenarios, riesgos y lecturas.';
 
+-- Corridas de la ingesta automática (src/ingest del backend): una fila por fuente y corrida.
+CREATE TABLE ingesta_corridas (
+  id      bigserial   PRIMARY KEY,
+  fuente  text        NOT NULL,                  -- 'bcb_tco', 'fmi_weo', …
+  inicio  timestamptz NOT NULL DEFAULT now(),
+  fin     timestamptz,
+  estado  text        NOT NULL CHECK (estado IN ('ok', 'error', 'sin_cambios')),
+  filas   integer     NOT NULL DEFAULT 0,
+  mensaje text
+);
+CREATE INDEX ingesta_corridas_fuente_idx ON ingesta_corridas (fuente, inicio DESC);
+COMMENT ON TABLE ingesta_corridas IS 'Bitácora de la ingesta automática (fuente, estado, filas y mensaje de cada corrida).';
+
+-- Comparador regional (FMI WEO): una fila por país, indicador y año.
+CREATE TABLE region_observaciones (
+  pais       char(3)       NOT NULL,             -- ISO-3: ARG, BOL, BRA, CHL, COL, ECU, PER, PRY, URY
+  indicador  text          NOT NULL,             -- código WEO: NGDP_RPCH, PCPIEPCH, …
+  anio       smallint      NOT NULL,
+  valor      numeric(14,4) NOT NULL,
+  proyeccion boolean       NOT NULL DEFAULT false,
+  vintage    text          NOT NULL,             -- edición del WEO / fecha de descarga
+  PRIMARY KEY (pais, indicador, anio)
+);
+COMMENT ON TABLE region_observaciones IS 'Indicadores macro comparables de la región (FMI WEO); proyeccion = año ≥ 2026.';
+
 -- Versión del seed aplicado: la API la compara al arrancar para auto-aprovisionar.
 CREATE TABLE seed_meta (
   version     text        PRIMARY KEY,           -- hash de schema.sql + seed.sql aplicado

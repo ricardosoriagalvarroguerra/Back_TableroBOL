@@ -15,6 +15,10 @@ import { registerFuentes } from './routes/fuentes.ts';
 import { registerSearch } from './routes/search.ts';
 import { registerAnalisis } from './routes/analisis.ts';
 import { ensureSeed } from './bootstrap.ts';
+import { registerRegion } from './routes/region.ts';
+import { registerAlertas } from './routes/alertas.ts';
+import { registerIngesta } from './routes/ingesta.ts';
+import { programarIngesta } from './ingest/index.ts';
 
 const app = Fastify({ logger: true });
 
@@ -39,6 +43,9 @@ registerEventos(app);
 registerFuentes(app);
 registerSearch(app);
 registerAnalisis(app);
+registerRegion(app);
+registerAlertas(app);
+registerIngesta(app);
 
 const shutdown = async () => {
   await app.close();
@@ -54,6 +61,9 @@ try {
 } catch (err) {
   app.log.error({ err }, 'no se pudo verificar el seed (¿BDR caída?); se sirve igual');
 }
+
+// Ingesta automática de fuentes (al arrancar y cada INGEST_INTERVAL_HOURS).
+programarIngesta(app.log);
 
 try {
   await app.listen({ port: config.port, host: config.host });
